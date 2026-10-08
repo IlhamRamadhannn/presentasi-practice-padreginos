@@ -25,17 +25,32 @@ export default async function OrderDetailPage({
   console.timeEnd("getCurrentUser");
 
   // Context for staff: how busy was that day, how popular is each pizza
-  console.time("getDayOrderCount"); //check time
-  const dayOrderCount = await getDayOrderCount(order.date);
-  console.timeEnd("getDayOrderCount");
-  
-  const soldThatDay: number[] = [];
-  for (const line of order.lines) {
-      const label = `getPizzaSoldOnDay-${line.pizzaId}`;
-      console.time(label);
-    soldThatDay.push(await getPizzaSoldOnDay(line.pizzaId, order.date));
-      console.timeEnd(label);
-  }
+const dayOrderCountPromise =
+  getDayOrderCount(order.date);
+
+const soldThatDayPromise = Promise.all(
+  order.lines.map(async (line, i) => {
+    const label =
+      `getPizzaSoldOnDay-${i}-${line.pizzaId}`;
+
+    console.time(label);
+
+    const result = await getPizzaSoldOnDay(
+      line.pizzaId,
+      order.date
+    );
+
+    console.timeEnd(label);
+
+    return result;
+  }),
+);
+
+const [dayOrderCount, soldThatDay] =
+  await Promise.all([
+    dayOrderCountPromise,
+    soldThatDayPromise,
+  ]);
 
   return (
     <section className="max-w-3xl">
