@@ -14,15 +14,27 @@ export default async function OrderDetailPage({
   const orderId = Number(id);
   if (!Number.isInteger(orderId)) notFound();
 
+  console.time("getOrder"); //check time 
   const order = await getOrder(orderId); // checks "admin:view" inside
+  console.timeEnd("getOrder");
+  
   if (!order) notFound();
+
+  console.time("getCurrentUser"); //check time
   const user = await getCurrentUser();
+  console.timeEnd("getCurrentUser");
 
   // Context for staff: how busy was that day, how popular is each pizza
+  console.time("getDayOrderCount"); //check time
   const dayOrderCount = await getDayOrderCount(order.date);
+  console.timeEnd("getDayOrderCount");
+  
   const soldThatDay: number[] = [];
   for (const line of order.lines) {
+      const label = `getPizzaSoldOnDay-${line.pizzaId}`;
+      console.time(label);
     soldThatDay.push(await getPizzaSoldOnDay(line.pizzaId, order.date));
+      console.timeEnd(label);
   }
 
   return (
