@@ -1,13 +1,12 @@
 "use client";
 
-import { createContext, use, useEffect, useState } from "react";
+import { createContext, use, useEffect, useMemo, useState } from "react";
 
 // Everything "live" in the dashboard, in one place
 type Live = {
   now: number | null;
   pending: number | null;
   checkedAt: number | null;
-  formatPrice: (value: number) => string;
 };
 
 const LiveContext = createContext<Live | null>(null);
@@ -37,10 +36,13 @@ export function LiveProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, []);
 
-  const formatPrice = (value: number) =>
-    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value);
+  const value = useMemo(() => ({ now, pending, checkedAt }), [now, pending, checkedAt]);
 
-  return <LiveContext value={{ now, pending, checkedAt, formatPrice }}>{children}</LiveContext>;
+  return (
+    <LiveContext value={value}>
+      {children}
+    </LiveContext>
+  );
 }
 
 export function useLive(): Live {
