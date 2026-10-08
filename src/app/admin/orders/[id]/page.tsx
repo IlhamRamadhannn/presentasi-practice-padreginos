@@ -8,7 +8,7 @@ import StatusBadge from "@/components/admin/StatusBadge";
 import {
   getDayOrderCount,
   getOrder,
-  getPizzaSoldOnDay,
+  getPizzasSoldOnDay,
 } from "@/lib/admin-data";
 
 import { getCurrentUser } from "@/lib/auth";
@@ -37,23 +37,21 @@ export default async function OrderDetailPage({
   // Kita hanya membuat Promise-nya terlebih dahulu.
   const dayOrderCountPromise = getDayOrderCount(order.date);
 
-  const soldThatDayPromise = Promise.all(
-    order.lines.map(async (line, i) => {
-      const label =
-        `getPizzaSoldOnDay-${i}-${line.pizzaId}`;
+  const pizzaIds = [
+  ...new Set(
+    order.lines.map((line) => line.pizzaId)
+  ),
+];
 
-      console.time(label);
+// console.time("getPizzasSoldOnDay");
 
-      const result = await getPizzaSoldOnDay(
-        line.pizzaId,
-        order.date,
-      );
-
-      console.timeEnd(label);
-
-      return result;
-    }),
+const soldThatDayPromise =
+  getPizzasSoldOnDay(
+    pizzaIds,
+    order.date,
   );
+
+// console.timeEnd("getPizzasSoldOnDay");
 
   return (
     <section className="max-w-3xl">
@@ -150,7 +148,7 @@ export default async function OrderDetailPage({
                 <Suspense fallback={0}>
                   <SoldThatDay
                     promise={soldThatDayPromise}
-                    index={i}
+                    pizzaId={line.pizzaId}
                   />
                 </Suspense>
               </td>
@@ -188,12 +186,12 @@ async function DayOrderCount({
 
 async function SoldThatDay({
   promise,
-  index,
+  pizzaId,
 }: {
-  promise: Promise<number[]>;
-  index: number;
+  promise: Promise<Record<string, number>>;
+  pizzaId: string;
 }) {
   const soldThatDay = await promise;
 
-  return soldThatDay[index] ?? 0;
+  return soldThatDay[pizzaId] ?? 0;
 }
