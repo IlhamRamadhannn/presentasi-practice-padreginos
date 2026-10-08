@@ -1,8 +1,16 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
+
 import StatusActions from "@/components/admin/StatusActions";
 import StatusBadge from "@/components/admin/StatusBadge";
-import { getDayOrderCount, getOrder, getPizzaSoldOnDay } from "@/lib/admin-data";
+
+import {
+  getDayOrderCount,
+  getOrder,
+  getPizzaSoldOnDay,
+} from "@/lib/admin-data";
+
 import { getCurrentUser } from "@/lib/auth";
 import { formatPrice } from "@/lib/format";
 import { can } from "@/lib/permissions";
@@ -12,99 +20,180 @@ export default async function OrderDetailPage({
 }: PageProps<"/admin/orders/[id]">) {
   const { id } = await params;
   const orderId = Number(id);
+
   if (!Number.isInteger(orderId)) notFound();
 
-  console.time("getOrder"); //check time 
-  const order = await getOrder(orderId); // checks "admin:view" inside
+  console.time("getOrder");
+  const order = await getOrder(orderId);
   console.timeEnd("getOrder");
-  
+
   if (!order) notFound();
 
-  console.time("getCurrentUser"); //check time
+  console.time("getCurrentUser");
   const user = await getCurrentUser();
   console.timeEnd("getCurrentUser");
 
-  // Context for staff: how busy was that day, how popular is each pizza
-const dayOrderCountPromise =
-  getDayOrderCount(order.date);
+  // Jangan await di sini.
+  // Kita hanya membuat Promise-nya terlebih dahulu.
+  const dayOrderCountPromise = getDayOrderCount(order.date);
 
-const soldThatDayPromise = Promise.all(
-  order.lines.map(async (line, i) => {
-    const label =
-      `getPizzaSoldOnDay-${i}-${line.pizzaId}`;
+  const soldThatDayPromise = Promise.all(
+    order.lines.map(async (line, i) => {
+      const label =
+        `getPizzaSoldOnDay-${i}-${line.pizzaId}`;
 
-    console.time(label);
+      console.time(label);
 
-    const result = await getPizzaSoldOnDay(
-      line.pizzaId,
-      order.date
-    );
+      const result = await getPizzaSoldOnDay(
+        line.pizzaId,
+        order.date,
+      );
 
-    console.timeEnd(label);
+      console.timeEnd(label);
 
-    return result;
-  }),
-);
-
-const [dayOrderCount, soldThatDay] =
-  await Promise.all([
-    dayOrderCountPromise,
-    soldThatDayPromise,
-  ]);
+      return result;
+    }),
+  );
 
   return (
     <section className="max-w-3xl">
-      <Link href="/admin/orders" className="text-sm text-brand hover:underline">
+      <Link
+        href="/admin/orders"
+        className="text-sm text-brand hover:underline"
+      >
         ← Semua order
       </Link>
-      <h1 className="mt-4 text-3xl font-black">Order #{order.id}</h1>
+
+      <h1 className="mt-4 text-3xl font-black">
+        Order #{order.id}
+      </h1>
+
       <p className="mt-1 flex items-center gap-3 text-ink/70">
         {order.date} {order.time}
-        <span className="text-sm" data-testid="day-order-count">
-          · {dayOrderCount} order hari itu
-        </span>
+
+        <Suspense
+          fallback={
+            <span className="text-sm">
+              · ... order hari itu
+            </span>
+          }
+        >
+          <DayOrderCount
+            promise={dayOrderCountPromise}
+          />
+        </Suspense>
+
         <span data-testid="order-status">
           <StatusBadge status={order.status} />
         </span>
       </p>
-      {/* A UI hint only: the real check is inside updateOrderStatusAction */}
-      {can(user, "orders:update") && <StatusActions orderId={order.id} status={order.status} />}
+
+      {can(user, "orders:update") && (
+        <StatusActions
+          orderId={order.id}
+          status={order.status}
+        />
+      )}
 
       <table className="mt-6 w-full overflow-hidden rounded-xl bg-white text-left text-sm shadow-sm">
         <thead className="bg-stone-50 text-xs uppercase text-ink/60">
           <tr>
             <th className="px-4 py-3">Pizza</th>
             <th className="px-4 py-3">Ukuran</th>
-            <th className="px-4 py-3 text-right">Qty</th>
-            <th className="px-4 py-3 text-right">Harga</th>
-            <th className="px-4 py-3 text-right">Terjual hari itu</th>
+            <th className="px-4 py-3 text-right">
+              Qty
+            </th>
+            <th className="px-4 py-3 text-right">
+              Harga
+            </th>
+            <th className="px-4 py-3 text-right">
+              Terjual hari itu
+            </th>
           </tr>
         </thead>
+
         <tbody>
           {order.lines.map((line, i) => (
-            <tr key={i} className="border-t border-black/5">
+            <tr
+              key={i}
+              className="border-t border-black/5"
+            >
               <td className="px-4 py-2">
                 {can(user, "products:manage") ? (
-                  <Link href={`/admin/products/${line.pizzaId}`} className="hover:underline">
+                  <Link
+                    href={`/admin/products/${line.pizzaId}`}
+                    className="hover:underline"
+                  >
                     {line.name}
                   </Link>
                 ) : (
                   line.name
                 )}
               </td>
-              <td className="px-4 py-2">{line.size}</td>
-              <td className="px-4 py-2 text-right">{line.quantity}</td>
-              <td className="px-4 py-2 text-right">{formatPrice(line.price)}</td>
-              <td className="px-4 py-2 text-right" data-testid="sold-that-day">
-                {soldThatDay[i]}
+
+              <td className="px-4 py-2">
+                {line.size}
+              </td>
+
+              <td className="px-4 py-2 text-right">
+                {line.quantity}
+              </td>
+
+              <td className="px-4 py-2 text-right">
+                {formatPrice(line.price)}
+              </td>
+
+              <td
+                className="px-4 py-2 text-right"
+                data-testid="sold-that-day"
+              >
+                <Suspense fallback={0}>
+                  <SoldThatDay
+                    promise={soldThatDayPromise}
+                    index={i}
+                  />
+                </Suspense>
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="mt-4 text-right text-lg font-bold" data-testid="order-total">
+
+      <p
+        className="mt-4 text-right text-lg font-bold"
+        data-testid="order-total"
+      >
         Total {formatPrice(order.total)}
       </p>
     </section>
   );
+}
+
+async function DayOrderCount({
+  promise,
+}: {
+  promise: Promise<number>;
+}) {
+  const count = await promise;
+
+  return (
+    <span
+      className="text-sm"
+      data-testid="day-order-count"
+    >
+      · {count} order hari itu
+    </span>
+  );
+}
+
+async function SoldThatDay({
+  promise,
+  index,
+}: {
+  promise: Promise<number[]>;
+  index: number;
+}) {
+  const soldThatDay = await promise;
+
+  return soldThatDay[index] ?? 0;
 }
